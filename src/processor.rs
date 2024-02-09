@@ -1,14 +1,5 @@
 use solana_program::{
-    entrypoint,
-    entrypoint::ProgramResult,
-    pubkey::Pubkey,
-    msg,
-    account_info::{next_account_info, AccountInfo},
-    system_instruction,
-    program_error::ProgramError,
-    sysvar::{rent::Rent, Sysvar},
-    program::{invoke_signed},
-    borsh1::try_from_slice_unchecked,
+    account_info::{next_account_info, AccountInfo}, borsh1::try_from_slice_unchecked, entrypoint::{self, ProgramResult}, msg, program::invoke_signed, program_error::ProgramError, program_pack::IsInitialized, pubkey::Pubkey, system_instruction, sysvar::{rent::Rent, Sysvar}
 };
 
 use std::convert::TryInto;
@@ -65,6 +56,22 @@ pub fn add_movie_review(
     msg!("Rating: {}", rating);
     msg!("Description: {}", description);
 
+
+    if rating > 5 || rating < 1 {
+        msg!("Rating cannot be higher than 5");
+        return Err(ReviewError::InvalidRating.into())
+    }
+
+
+    let total_len: usize = 1 + 1 + (4 + title.len()) + (4 + description.len());
+    if total_len > 1000 {
+        msg!("Data length is larger than 1000 bytes");
+        return Err(ReviewError::InvalidDataLength.into())
+    }
+
+
+
+
     // Get Account iterator
     let account_info_iter = &mut accounts.iter();
 
@@ -73,8 +80,25 @@ pub fn add_movie_review(
     let pda_account = next_account_info(account_info_iter)?;
     let system_program = next_account_info(account_info_iter)?;
 
+
+    // signer check, stops reviews submitted impersonating someone else
+    if !initializer.is_signer {
+        msg!("Missing required signature");
+        return Err(ProgramError::MissingRequiredSignature)
+    }
+
+
+
     // Derive PDA
     let (pda, bump_seed) = Pubkey::find_program_address(&[initializer.key.as_ref(), title.as_bytes().as_ref(),], program_id);
+
+    // check if PDA matches client
+    if pda != *pda_account.key {
+        msg!("Invalid seeds for PDA");
+        return Err(ReviewError::InvalidPDA.into())
+    }
+
+    
 
     // OLD: Calculate account size required
     // let account_len: usize = 1 + 1 + (4 + title.len()) + (4 + description.len());
@@ -104,6 +128,16 @@ pub fn add_movie_review(
     msg!("unpacking state account");
     let mut account_data = try_from_slice_unchecked::<MovieAccountState>(&pda_account.data.borrow()).unwrap();
     msg!("borrowed account data");
+
+
+    // checks to see if account already exists, the idea is that the movie review has already been created by that user, and the pda has been created.
+    msg!("checking if movie account is already initialized");
+    if account_data.is_initialized() {
+        msg!("Account already initialized");
+        return Err(ProgramError::AccountAlreadyInitialized);
+    }
+
+
 
     account_data.title = title;
     account_data.rating = rating;
