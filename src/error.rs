@@ -5,7 +5,7 @@
 // The rating provided does not fall in the 1-5 range
 
 
-use solana_program::{program_error::ProgramError};
+use solana_program::program_error::ProgramError;
 use thiserror::Error;
 
 

@@ -1,6 +1,4 @@
-use solana_program::{
-    program_pack::{Sealed, IsInitialized}
-};
+use solana_program::program_pack::{Sealed, IsInitialized};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 

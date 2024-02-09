@@ -29,6 +29,11 @@ pub fn process_instruction(
             // Make a call to `add_move_review` function
             let add_movie_review_result = add_movie_review(program_id, accounts, title, rating, description);
             msg!("add_movie_review_result: {:?}", add_movie_review_result);
+        },
+        // add UpdateMovieReview to match against our new data structure
+        MovieInstruction::UpdateMovieReview { title, rating, description } => {
+            // make call to update function that we'll define next
+            update_movie_review(program_id, accounts, title, rating, description);
         }
     }
 
@@ -156,3 +161,100 @@ pub fn add_movie_review(
 }
 
 
+
+pub fn update_movie_review(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    title: String,
+    rating: u8,
+    description: String
+) -> ProgramResult {
+
+    msg!("update_movie_review() called");
+
+    msg!("Updating movie review...");
+
+    msg!("Title: {}", title);
+    msg!("Rating: {}", rating);
+    msg!("Description: {}", description);
+
+    if rating > 5 || rating < 1 {
+        msg!("Rating cannot be higher than 5");
+        return Err(ReviewError::InvalidRating.into())
+    }
+    
+    
+
+
+    // Get Account iterator
+    let account_info_iter = &mut accounts.iter();
+
+    // Get accounts
+    let initializer = next_account_info(account_info_iter)?;
+    let pda_account = next_account_info(account_info_iter)?;
+
+
+    if pda_account.owner != program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
+
+
+    if !initializer.is_signer {
+        msg!("Missing required signature");
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    msg!("unpacking state account");
+    let mut account_data = try_from_slice_unchecked::<MovieAccountState>(&pda_account.data.borrow()).unwrap();
+    msg!("borrowed account data");
+
+
+    // Derive PDA and check that it matches client
+    let (pda, _bump_seed) = Pubkey::find_program_address(&[initializer.key.as_ref(), account_data.title.as_bytes().as_ref(),], program_id);
+
+    if pda != *pda_account.key {
+        msg!("Invalid seeds for PDA");
+        return Err(ReviewError::InvalidPDA.into());
+    }
+
+    
+    msg!("checking if movie account is initialized");
+    if !account_data.is_initialized() {
+        msg!("Account is not initialized");
+        return Err(ReviewError::UninitializedAccount.into());
+    }
+
+
+    let total_len: usize = 1 + 1 + (4 + account_data.title.len()) + (4 + description.len());
+    if total_len > 1000 {
+        msg!("Data length is larger than 1000 bytes");
+        return Err(ReviewError::InvalidDataLength.into())
+    }
+
+
+    msg!("Review before update:");
+    msg!("Title: {}", account_data.title);
+    msg!("Rating: {}", account_data.rating);
+    msg!("Description: {}", account_data.description);
+
+
+    account_data.rating = rating;
+    account_data.description = description;
+
+    msg!("Review after update:");
+    msg!("Title: {}", account_data.title);
+    msg!("Rating: {}", account_data.rating);
+    msg!("Description: {}", account_data.description);
+
+    msg!("serializing account");
+    account_data.serialize(&mut &mut pda_account.data.borrow_mut()[..])?;
+    msg!("state account serialized");
+
+    Ok(())
+
+
+
+
+
+
+}
